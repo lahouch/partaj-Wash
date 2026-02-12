@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PartaJoy Connect</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --primary: #0077b6; --secondary: #caf0f8; --bg: #f0f4f8; --card: #ffffff; --text: #023e8a; --light-text: #48cae4; --danger: #e63946; --success: #2a9d8f; --orange: #fb8500; --purple: #7209b7; }
+        body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg); padding-bottom: 100px; color: var(--text); -webkit-tap-highlight-color: transparent; }
+        
+        #loader { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; flex-direction:column; align-items:center; justify-content:center; }
+        .hourglass { font-size: 50px; animation: flip 2s infinite; }
+        @keyframes flip { 0% { transform: rotate(0); } 50% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
+
+        nav { background: #fff; padding: 15px 20px; display: none; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: sticky; top:0; z-index:1000; }
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: #fff; display: flex; border-top: 1px solid #eee; z-index:1000; }
+        .nav-item { flex: 1; text-align: center; padding: 12px 5px; font-size: 0.7rem; color: #a0aec0; cursor: pointer; transition: 0.2s; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+        .nav-item i { font-style: normal; font-size: 1.2rem; }
+        .nav-item.active { color: var(--primary); font-weight: bold; }
+        
+        .view { display: none; padding: 20px; max-width: 500px; margin: auto; animation: fadeIn 0.4s ease-out; }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .ad-card { background: var(--card); padding: 20px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #e1e9f0; box-shadow: 0 4px 15px rgba(0,0,0,0.02); position: relative; }
+        .badge-btn { background: var(--secondary); color: var(--primary); padding: 6px 12px; border-radius: 10px; font-size: 0.7rem; font-weight: 800; border: none; }
+        
+        .auth-tabs { display: flex; margin-bottom: 20px; background: #eee; border-radius: 12px; padding: 4px; }
+        .auth-tab { flex: 1; text-align: center; padding: 10px; border-radius: 10px; cursor: pointer; font-weight: bold; color: #666; transition: 0.3s; }
+        .auth-tab.active { background: #fff; color: var(--primary); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+
+        .option-group { background: #f8fbff; padding: 15px; border-radius: 18px; margin-bottom: 15px; border: 1.5px solid #eef2f7; }
+        .option-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; font-size: 0.95rem; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+        .option-item input { width: 18px; height: 18px; accent-color: var(--primary); }
+
+        .btn { border: none; padding: 14px; border-radius: 14px; cursor: pointer; font-weight: 700; transition: 0.3s; width: 100%; margin-bottom: 5px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .btn-blue { background: linear-gradient(135deg, var(--primary), #00b4d8); color: #fff; }
+        .btn-orange { background: linear-gradient(135deg, var(--orange), #ffb703); color: #fff; height: 60px; border-radius: 18px; margin-bottom: 10px; }
+        .btn-wash { background: linear-gradient(135deg, #0096c7, var(--primary)); color: #fff; height: 60px; border-radius: 18px; margin-bottom: 10px; }
+        .btn-transport { background: linear-gradient(135deg, var(--purple), #b5179e); color: #fff; height: 60px; border-radius: 18px; margin-bottom: 20px; }
+        .btn-outline { background: #fff; color: var(--primary); border: 1.5px solid #e1e9f0; font-size: 0.8rem; }
+        .btn-danger { background: #fee2e2; color: var(--danger); border: 1px solid var(--danger); font-size: 0.75rem; padding: 8px; margin-top: 10px; }
+        
+        input, textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #e1e9f0; border-radius: 14px; box-sizing: border-box; font-size: 16px; outline: none; }
+        #map { height: 200px; border-radius: 20px; margin: 15px 0; border: 2px solid #e1e9f0; }
+        .ad-mini-map { height: 140px; width: 100%; border-radius: 14px; margin: 10px 0; border: 1px solid #e1e9f0; }
+        .ad-details-box { background: #f1f7ff; padding: 12px; border-radius: 12px; font-size: 0.85rem; margin: 10px 0; border-left: 4px solid var(--primary); }
+        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(2, 62, 138, 0.4); backdrop-filter: blur(8px); z-index:2000; align-items:center; justify-content:center; }
+        .modal-content { background: #fff; padding: 30px; border-radius: 28px; width: 90%; max-width: 420px; }
+        
+        .datetime-container { display: flex; gap: 10px; margin: 10px 0; }
+        .datetime-container div { flex: 1; }
+        .datetime-label { font-size: 0.75rem; font-weight: bold; color: var(--primary); margin-left: 5px; }
+
+        /* Styles pour les bulles de messages groupés */
+        .msg-bubble { margin: 5px 0; padding: 10px; border-radius: 12px; font-size: 0.9rem; max-width: 85%; }
+        .msg-received { background: #f1f7ff; align-self: flex-start; border-bottom-left-radius: 2px; border: 1px solid #e1e9f0; }
+        .msg-sent { background: var(--secondary); color: var(--primary); align-self: flex-end; border-bottom-right-radius: 2px; margin-left: auto; }
+        .msg-date { font-size: 0.65rem; color: #999; margin-top: 4px; display: block; }
+    </style>
+</head>
+<body>
+
+<div id="loader"><div class="hourglass">⌛</div><p>Traitement en cours...</p></div>
+
+<nav id="top-nav">
+    <div style="font-weight:900; color:var(--primary); font-size:1.3rem;">🤝 PartaJoy Connect</div>
+    <div id="userLabel" style="font-size:0.85rem; font-weight:600; background:var(--secondary); padding:5px 12px; border-radius:20px;"></div>
+</nav>
+
+<div id="view-auth" class="view active">
+    <div style="text-align: center; margin-bottom: 25px;"><div style="font-size: 4.5rem;">🏘️</div><h1 style="color: var(--primary); font-size: 1.8rem; margin:0;">PartaJoy Connect</h1></div>
+    <div class="auth-tabs">
+        <div id="tab-login" class="auth-tab active" onclick="switchAuth('login')">Connexion</div>
+        <div id="tab-register" class="auth-tab" onclick="switchAuth('register')">Inscription</div>
+    </div>
+    <div id="form-login" class="ad-card">
+        <input type="email" id="l-email" placeholder="Email *">
+        <input type="password" id="l-pass" placeholder="Mot de passe *">
+        <button class="btn btn-blue" onclick="handleLogin()">Se connecter</button>
+    </div>
+    <div id="form-register" class="ad-card" style="display:none">
+        <input type="text" id="r-name" placeholder="Nom complet *">
+        <input type="email" id="r-email" placeholder="Email (Obligatoire) *">
+        <input type="tel" id="r-gsm" placeholder="GSM (10 chiffres) *" maxlength="10">
+        <input type="password" id="r-pass" placeholder="Créer un mot de passe *">
+        <input type="password" id="r-pass2" placeholder="Confirmer le mot de passe *">
+        <button class="btn btn-blue" onclick="handleRegister()">S'inscrire</button>
+    </div>
+</div>
+
+<div id="view-home" class="view">
+    <button class="btn btn-orange" onclick="showForm('CUISINE')">🍳 Proposez votre plat maison</button>
+    <button class="btn btn-wash" onclick="showForm('LAVERIE')">🌀 Proposez votre machine</button>
+    <button class="btn btn-transport" onclick="showForm('TRANSPORT')">🚗 Proposer un transport</button>
+    <div id="refresh-bar" style="text-align:center; font-size:0.75rem; color:var(--light-text); margin-bottom:15px;">Mise à jour dans 20s</div>
+    <div id="list-container"></div>
+</div>
+
+<div id="view-form" class="view">
+    <div class="ad-card">
+        <div id="form-header-box" style="font-weight:800; color:var(--primary); margin-bottom:15px;"></div>
+        <div id="opts-cuisine" class="option-group" style="display:none">
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🥘 Plat du jour chaud"> 🥘 Plat du jour chaud</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🥗 Option Végétarienne"> 🥗 Option Végétarienne</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🍰 Dessert inclus"> 🍰 Dessert inclus</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🚲 Livraison possible"> 🚲 Livraison possible</label>
+        </div>
+        <div id="opts-laverie" class="option-group" style="display:none">
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🌀 Machine standard (7-9 kg)"> 🌀 Machine standard (7-9 kg)</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🧼 Lessive / Assouplissant"> 🧼 Lessive / Assouplissant</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="💨 Sèche-linge"> 💨 Sèche-linge</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="👕 Pliage de linge"> 👕 Pliage de linge</label>
+        </div>
+        <div id="opts-transport" class="option-group" style="display:none">
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🚗 Je viens te chercher?"> 🚗 Je viens te chercher?</label>
+            <label class="option-item"><input type="checkbox" class="opt-item" value="🙋‍♂️ Peux-tu me chercher?"> 🙋‍♂️ Peux-tu me chercher?</label>
+        </div>
+        <div class="datetime-container">
+            <div><span class="datetime-label">📅 Date</span><input type="date" id="f-date"></div>
+            <div><span class="datetime-label">⏰ Heure</span><input type="time" id="f-time"></div>
+        </div>
+        <div id="map"></div>
+        <input type="hidden" id="f-lat"><input type="hidden" id="f-lng">
+        <button class="btn btn-blue" onclick="submitAd()">🚀 Publier l'annonce</button>
+        <button class="btn btn-outline" onclick="showHome()">Annuler</button>
+    </div>
+</div>
+
+<div id="view-inbox" class="view">
+    <h3 style="margin-bottom:20px">📬 Mes discussions</h3>
+    <div id="inbox-container"></div>
+</div>
+
+<div id="view-support" class="view">
+    <div class="ad-card">
+        <h3 style="margin-top:0">📞 Support Technique</h3>
+        <p style="font-size:0.85rem;">Une question ou un bug ? Écrivez-nous.</p>
+        <textarea id="supportBody" placeholder="Votre message..." rows="6"></textarea>
+        <button class="btn btn-blue" onclick="sendSupport()">Envoyer l'aide</button>
+    </div>
+</div>
+
+<div id="main-nav" class="bottom-nav" style="display:none">
+    <div class="nav-item active" id="nav-home" onclick="showHome()"><i>🏠</i>Services</div>
+    <div class="nav-item" id="nav-inbox" onclick="showInbox()"><i>💬</i>Messages</div>
+    <div class="nav-item" id="nav-support" onclick="showSupport()"><i>📞</i>Support</div>
+    <div class="nav-item" onclick="logout()" style="color:var(--danger)"><i>🚪</i>Quitter</div>
+</div>
+
+<div id="msgModal" class="modal"><div class="modal-content">
+    <h4>✉️ Répondre</h4>
+    <textarea id="msgBody" placeholder="Écrivez ici..." rows="5"></textarea>
+    <button class="btn btn-blue" onclick="sendMessage()">Envoyer</button>
+    <button class="btn btn-outline" onclick="closeModal('msgModal')">Annuler</button>
+</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbyQDS8rd37J4EmQKZnYfe0yqHsNexF4BVFJdt7XmbWRcLVY2PwFotLxCfZITJ9Q_Lrsfw/exec"; 
+    let currentUser = JSON.parse(localStorage.getItem('user')), allAds = [];
+    let map, marker, activeAdId, activeRecipient, activeRecipientName, activeCategory, refreshTimer;
+
+    function toggleLoader(show) { document.getElementById('loader').style.display = show ? 'flex' : 'none'; }
+    function switchAuth(mode) {
+        document.getElementById('form-login').style.display = mode === 'login' ? 'block' : 'none';
+        document.getElementById('form-register').style.display = mode === 'register' ? 'block' : 'none';
+        document.getElementById('tab-login').classList.toggle('active', mode === 'login');
+        document.getElementById('tab-register').classList.toggle('active', mode === 'register');
+    }
+
+    function handleLogin() {
+        const email = document.getElementById('l-email').value, pass = document.getElementById('l-pass').value;
+        if(!email || !pass) return alert("Remplissez les champs.");
+        toggleLoader(true);
+        fetch(API_URL, {method:'POST', body:JSON.stringify({action:'login', email, password:pass})}).then(r=>r.json()).then(res=>{
+            toggleLoader(false);
+            if(res.status==='success'){ currentUser=res.user; localStorage.setItem('user',JSON.stringify(res.user)); initApp(); } 
+            else alert(res.message);
+        });
+    }
+
+    function handleRegister() {
+        const name = document.getElementById('r-name').value, email = document.getElementById('r-email').value;
+        const gsm = document.getElementById('r-gsm').value, p1 = document.getElementById('r-pass').value, p2 = document.getElementById('r-pass2').value;
+        if(!name || !email || !gsm || !p1) return alert("Tous les champs sont obligatoires.");
+        if(gsm.length !== 10 || isNaN(gsm)) return alert("Le numéro GSM doit contenir exactement 10 chiffres.");
+        if(p1 !== p2) return alert("Les mots de passe ne correspondent pas.");
+        toggleLoader(true);
+        fetch(API_URL, { method:'POST', body:JSON.stringify({action:'register', name, email, gsm, password:p1}) })
+        .then(r=>r.json()).then(res=>{
+            toggleLoader(false);
+            if(res.status==='success'){ currentUser=res.user; localStorage.setItem('user',JSON.stringify(res.user)); initApp(); } 
+            else alert(res.message);
+        });
+    }
+
+    function showHome() { 
+        updateNav('nav-home');
+        document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-home').classList.add('active'); 
+        document.getElementById('main-nav').style.display='flex'; 
+        document.getElementById('top-nav').style.display='flex'; 
+        loadAds(); if(!refreshTimer) startRefreshCycle(); 
+    }
+
+    function showInbox() {
+        updateNav('nav-inbox');
+        document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-inbox').classList.add('active');
+        toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:"getMessages", email:currentUser.email})}).then(r=>r.json()).then(res=>{
+            toggleLoader(false);
+            const container = document.getElementById('inbox-container'); container.innerHTML = "";
+            
+            // 1. Groupement des messages par ID d'annonce
+            const groups = {};
+            res.messages.forEach(m => {
+                if(!groups[m.adId]) groups[m.adId] = { messages: [], lastDate: new Date(0) };
+                groups[m.adId].messages.push(m);
+                let msgDate = new Date(m.date);
+                if(msgDate > groups[m.adId].lastDate) groups[m.adId].lastDate = msgDate;
+            });
+
+            // 2. Trier les groupes par date du dernier message (Plus récent en haut)
+            const sortedGroupKeys = Object.keys(groups).sort((a,b) => groups[b].lastDate - groups[a].lastDate);
+
+            // 3. Affichage par groupe
+            sortedGroupKeys.forEach(adId => {
+                const group = groups[adId];
+                const ad = allAds.find(a => a.ID === adId);
+                const firstMsg = group.messages[0];
+                
+                // Déterminer l'interlocuteur (pas moi)
+                let otherName = firstMsg.fromName === currentUser.name ? firstMsg.toName : firstMsg.fromName;
+                let otherEmail = firstMsg.senderEmail === currentUser.email ? firstMsg.receiverEmail : firstMsg.senderEmail;
+
+                const div = document.createElement('div'); 
+                div.className='ad-card';
+                
+                let adInfoHtml = ad ? `<div class="ad-details-box" style="margin-bottom:15px;">${ad.Remarque}</div>` : `<div style="font-size:0.7rem; color:#999; margin-bottom:10px;">(Annonce archivée)</div>`;
+                
+                let messagesHtml = group.messages.map(m => `
+                    <div class="msg-bubble ${m.type === 'envoyé' ? 'msg-sent' : 'msg-received'}">
+                        ${m.text}
+                        <span class="msg-date">${new Date(m.date).toLocaleString('fr-FR', {hour:'2-digit', minute:'2-digit', day:'2-digit', month:'short'})}</span>
+                    </div>
+                `).join('');
+
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">
+                        <span class="badge-btn">Réf: ${adId}</span>
+                        <span style="font-weight:bold; color:var(--primary); font-size:0.85rem;">👤 ${otherName}</span>
+                    </div>
+                    ${adInfoHtml}
+                    <div style="display:flex; flex-direction:column; max-height:200px; overflow-y:auto; padding-right:5px; margin-bottom:15px;">
+                        ${messagesHtml}
+                    </div>
+                    <button class="btn btn-outline" style="height:35px;" onclick="openMsg('${adId}','${otherEmail}','${otherName}')">Écrire un message</button>
+                `;
+                container.appendChild(div);
+            });
+        });
+    }
+
+    function showSupport() {
+        updateNav('nav-support');
+        document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-support').classList.add('active');
+    }
+
+    function updateNav(id) {
+        document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+    }
+
+    function loadAds() {
+        fetch(API_URL).then(r=>r.json()).then(data => {
+            allAds = data.reverse(); 
+            const container = document.getElementById('list-container'); container.innerHTML = ""; 
+            allAds.forEach(ad => {
+                const isOwner = ad.Email === currentUser.email;
+                const div = document.createElement('div'); div.className='ad-card';
+                div.innerHTML=`
+                    <div style="display:flex; justify-content:space-between;"><span class="badge-btn">${ad.ID}</span><span style="font-size:0.75rem; color:var(--primary); font-weight:800;">${ad.Category}</span></div>
+                    <div style="font-weight:800; margin-top:10px">Voisin: ${ad.Nom}</div>
+                    <div class="ad-details-box">${ad.Remarque.replace(/\n/g, "<br>")}</div>
+                    <div id="map-${ad.ID.replace(/\W/g,'')}" class="ad-mini-map"></div>
+                    ${isOwner ? `<button class="btn btn-danger" onclick="archiveAd('${ad.ID}')">⚙️ Service terminé (Supprimer)</button>` : `<button class="btn btn-blue" onclick="openMsg('${ad.ID}','${ad.Email}','${ad.Nom}')">🫧 Contacter</button>`}
+                `;
+                container.appendChild(div);
+                setTimeout(() => {
+                    const mini = L.map(`map-${ad.ID.replace(/\W/g,'')}`, { zoomControl:false, attributionControl:false }).setView([ad.Lat, ad.Lng], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mini); L.marker([ad.Lat, ad.Lng]).addTo(mini);
+                }, 300);
+            });
+        });
+    }
+
+    function archiveAd(id) {
+        if(confirm("L'annonce ne sera plus visible. Confirmer ?")){
+            toggleLoader(true);
+            fetch(API_URL,{method:'POST', body:JSON.stringify({action:'archiveAd', adId:id})}).then(()=> { toggleLoader(false); loadAds(); });
+        }
+    }
+
+    function submitAd() {
+        const selDate = document.getElementById('f-date').value;
+        const selTime = document.getElementById('f-time').value;
+        if(!selDate || !selTime) return alert("Veuillez sélectionner une date et une heure.");
+        if(!document.getElementById('f-lat').value) return alert("Veuillez cliquer sur la carte.");
+
+        toggleLoader(true);
+        let activeDivId = activeCategory === 'CUISINE' ? 'opts-cuisine' : (activeCategory === 'LAVERIE' ? 'opts-laverie' : 'opts-transport');
+        let opts = []; document.querySelectorAll(`#${activeDivId} .opt-item:checked`).forEach(i => opts.push(i.value));
+        
+        let fullRemarque = (opts.length > 0 ? "Services: " + opts.join(", ") + "\n" : "");
+        fullRemarque += "📅 Le : " + selDate.split('-').reverse().join('/') + " à " + selTime;
+
+        fetch(API_URL,{method:'POST',body:JSON.stringify({ 
+            action:'createAd', category:activeCategory, nom:currentUser.name, email:currentUser.email, gsm:currentUser.gsm, remarque:fullRemarque, lat:document.getElementById('f-lat').value, lng:document.getElementById('f-lng').value 
+        })}).then(()=> { toggleLoader(false); showHome(); }); 
+    }
+
+    function sendSupport() {
+        const body = document.getElementById('supportBody').value; if(!body) return;
+        toggleLoader(true);
+        fetch(API_URL, {method:'POST', body:JSON.stringify({action:'contactSupport', name:currentUser.name, email:currentUser.email, message:body})})
+        .then(() => { toggleLoader(false); alert("Envoyé !"); document.getElementById('supportBody').value=""; showHome(); });
+    }
+
+    function sendMessage() {
+        const body = document.getElementById('msgBody').value; if(!body) return;
+        toggleLoader(true);
+        fetch(API_URL, { method:'POST', body:JSON.stringify({ action:'sendMessage', senderEmail:currentUser.email, senderName:currentUser.name, receiverEmail:activeRecipient, receiverName:activeRecipientName, refAnnonce:activeAdId, content:body }) })
+        .then(() => { toggleLoader(false); closeModal('msgModal'); showInbox(); });
+    }
+
+    function startRefreshCycle() {
+        let timeLeft = 20;
+        refreshTimer = setInterval(() => {
+            timeLeft--; document.getElementById('refresh-bar').innerText = `Mise à jour dans ${timeLeft}s`;
+            if(timeLeft <= 0) { timeLeft = 20; if(document.getElementById('view-home').classList.contains('active')) loadAds(); }
+        }, 1000);
+    }
+
+    function initMap() { 
+        if(map) return; map = L.map('map', { center: [50.8676, 4.3737], zoom: 14 }); 
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); 
+        map.on('click', e => { if(marker) marker.setLatLng(e.latlng); else marker=L.marker(e.latlng).addTo(map); document.getElementById('f-lat').value=e.latlng.lat; document.getElementById('f-lng').value=e.latlng.lng; }); 
+    }
+
+    function showForm(cat) { 
+        activeCategory = cat; document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-form').classList.add('active'); 
+        document.querySelectorAll('.opt-item').forEach(cb => cb.checked = false);
+        document.getElementById('f-date').value = ""; document.getElementById('f-time').value = "";
+        document.getElementById('form-header-box').innerText = "Nouvelle annonce : " + cat;
+        document.getElementById('opts-cuisine').style.display = cat === 'CUISINE' ? 'block' : 'none';
+        document.getElementById('opts-laverie').style.display = cat === 'LAVERIE' ? 'block' : 'none';
+        document.getElementById('opts-transport').style.display = cat === 'TRANSPORT' ? 'block' : 'none';
+        setTimeout(initMap, 300); 
+    }
+
+    function openMsg(id, email, name) { activeAdId=id; activeRecipient=email; activeRecipientName=name; document.getElementById('msgModal').style.display='flex'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function logout() { localStorage.clear(); location.reload(); }
+    function initApp() { if(currentUser) { document.getElementById('userLabel').innerText = "👤 " + currentUser.name; showHome(); } }
+    initApp();
+</script>
+</body>
+</html>
