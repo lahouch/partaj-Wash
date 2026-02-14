@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PartaJoy Connect</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root { --primary: #0077b6; --secondary: #caf0f8; --bg: #e5ddd5; --card: #ffffff; --text: #023e8a; --danger: #e63946; --orange: #fb8500; --wa-in: #ffffff; --wa-out: #dcf8c6; }
+        body { font-family: 'Inter', sans-serif; margin: 0; background: var(--bg); padding-bottom: 100px; color: var(--text); }
+        #loader { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:9999; flex-direction:column; align-items:center; justify-content:center; }
+        nav { background: #fff; padding: 15px 20px; display: none; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); position: sticky; top:0; z-index:1000; }
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: #fff; display: flex; border-top: 1px solid #eee; z-index:1000; }
+        .nav-item { flex: 1; text-align: center; padding: 12px 5px; font-size: 0.7rem; color: #a0aec0; cursor: pointer; display: flex; flex-direction: column; align-items: center; position: relative; }
+        .nav-item.active { color: var(--primary); font-weight: bold; }
+        .notification-dot { position: absolute; top: 8px; right: 30%; width: 10px; height: 10px; background: var(--danger); border-radius: 50%; border: 2px solid white; display: none; }
+        .view { display: none; padding: 15px; max-width: 500px; margin: auto; animation: fadeIn 0.3s; }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .ad-card { background: #fff; padding: 20px; border-radius: 20px; margin-bottom: 20px; border: 1px solid #e1e9f0; box-shadow: 0 4px 15px rgba(0,0,0,0.02); }
+        .btn { border: none; padding: 14px; border-radius: 14px; cursor: pointer; font-weight: 700; width: 100%; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 0.9rem; }
+        .btn-orange { background: var(--orange); color: #fff; }
+        .btn-view { background: #fff; color: var(--text); border: 2px solid #e1e9f0; justify-content: flex-start; padding-left: 20px; }
+        
+        /* WHATSAPP STYLE MESSAGES */
+        .chat-container { display: flex; flex-direction: column; gap: 8px; padding: 10px 0; }
+        .msg-bubble { position: relative; padding: 8px 12px; font-size: 0.95rem; max-width: 85%; line-height: 1.4; box-shadow: 0 1px 1px rgba(0,0,0,0.1); }
+        .msg-received { background: var(--wa-in); align-self: flex-start; border-radius: 0 12px 12px 12px; }
+        .msg-sent { background: var(--wa-out); align-self: flex-end; border-radius: 12px 0 12px 12px; }
+        
+        /* DETAILS IN INBOX */
+        .inbox-ad-info { background: rgba(0,0,0,0.03); border-radius: 10px; padding: 8px; margin-bottom: 15px; border-left: 3px solid var(--primary); font-size: 0.8rem; display: flex; gap: 10px; align-items: center; }
+        .inbox-ad-img { width: 50px; height: 50px; border-radius: 8px; object-fit: cover; }
+        
+        .option-group { background: #f8fbff; padding: 15px; border-radius: 18px; margin-bottom: 15px; border: 1.5px solid #eef2f7; }
+        .option-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 0.9rem; }
+        input[type="text"], input[type="email"], input[type="password"], input[type="tel"], input[type="date"], input[type="time"], textarea { width: 100%; padding: 14px; margin: 8px 0; border: 2px solid #e1e9f0; border-radius: 14px; box-sizing: border-box; font-size: 16px; outline: none; }
+        #map { height: 200px; border-radius: 20px; margin: 15px 0; }
+        .ad-mini-map { height: 140px; border-radius: 14px; margin: 10px 0; }
+        .modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:2000; align-items:center; justify-content:center; }
+        .modal-content { background: #fff; padding: 25px; border-radius: 25px; width: 90%; max-width: 400px; overflow-y: auto; max-height: 80vh; }
+        .badge-id { background: var(--secondary); color: var(--primary); padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; cursor: pointer; text-decoration: underline; font-weight: bold; }
+        .img-preview { width: 100%; border-radius: 15px; margin: 10px 0; display: none; }
+    </style>
+</head>
+<body>
+
+<div id="loader">⌛<p>Chargement...</p></div>
+<audio id="notifSound" src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3"></audio>
+
+<nav id="top-nav">
+    <div style="font-weight:900; color:var(--primary);">🤝 PartaJoy</div>
+    <div id="userLabel" style="font-size:0.8rem; background:var(--secondary); padding:5px 10px; border-radius:15px;"></div>
+</nav>
+
+<div id="view-auth" class="view active">
+    <div style="text-align: center; margin-bottom: 30px;"><h1>PartaJoy</h1><p>L'entraide entre voisins</p></div>
+    <div id="form-login" class="ad-card">
+        <h3>Connexion</h3>
+        <input type="email" id="l-email" placeholder="Email">
+        <input type="password" id="l-pass" placeholder="Mot de passe">
+        <button class="btn btn-orange" onclick="handleLogin()">Se connecter</button>
+        <p onclick="toggleAuth('register')" style="text-align:center; font-size:0.8rem; color:var(--primary); cursor:pointer">Créer un compte</p>
+    </div>
+    <div id="form-register" class="ad-card" style="display:none">
+        <h3>Inscription</h3>
+        <input type="text" id="r-name" placeholder="Nom complet">
+        <input type="email" id="r-email" placeholder="Email">
+        <input type="tel" id="r-gsm" placeholder="GSM (10 chiffres)" maxlength="10">
+        <input type="password" id="r-pass" placeholder="Mot de passe">
+        <input type="password" id="r-pass2" placeholder="Confirmer mot de passe">
+        <button class="btn btn-orange" onclick="handleRegister()">S'inscrire</button>
+        <p onclick="toggleAuth('login')" style="text-align:center; font-size:0.8rem; color:var(--primary); cursor:pointer">Déjà inscrit ?</p>
+    </div>
+</div>
+
+<div id="view-home" class="view">
+    <div class="section-title">✨ Je propose</div>
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+        <button class="btn btn-orange" onclick="showForm('CUISINE')">🍳 Plat</button>
+        <button class="btn btn-orange" style="background:var(--primary)" onclick="showForm('LAVERIE')">🌀 Machine</button>
+    </div>
+    <button class="btn btn-orange" style="background:var(--purple)" onclick="showForm('TRANSPORT')">🚗 Trajet voiture</button>
+    
+    <div class="section-title">🔍 Je cherche</div>
+    <button class="btn btn-view" onclick="loadAdsByCategory('CUISINE')">🥗 Plats</button>
+    <button class="btn btn-view" onclick="loadAdsByCategory('LAVERIE')">🧺 Machines</button>
+    <button class="btn btn-view" onclick="loadAdsByCategory('TRANSPORT')">🚘 Trajets</button>
+    <button class="btn btn-view" style="color:var(--primary); font-weight:bold;" onclick="loadAds()">🌐 Tout le flux</button>
+    <div id="list-container" style="margin-top:20px;"></div>
+</div>
+
+<div id="view-form" class="view">
+    <div class="ad-card">
+        <h3 id="form-title">Annonce</h3>
+        <div id="opts-cuisine" class="option-group" style="display:none">
+            <label class="option-item"><input type="checkbox" name="cuisine-opt" value="🥘 Plat chaud"> 🥘 Plat chaud</label>
+            <div style="margin-top:10px;">
+                <label style="font-size:0.8rem;">📸 Photo :</label>
+                <input type="file" id="f-image" accept="image/*" onchange="previewImage(this)">
+                <img id="p-img" class="img-preview">
+            </div>
+        </div>
+        <div id="opts-laverie" class="option-group" style="display:none">
+            <label class="option-item"><input type="checkbox" name="laverie-opt" value="🌀 Machine 7kg"> 🌀 Machine 7kg</label>
+        </div>
+        <div id="opts-transport" class="option-group" style="display:none">
+            <label class="option-item"><input type="radio" name="trans-type" value="🚗 Je conduis"> 🚗 Je conduis</label>
+        </div>
+        <div class="option-group">
+            <input type="date" id="f-date">
+            <input type="time" id="f-time">
+        </div>
+        <div id="map"></div>
+        <input type="hidden" id="f-lat"><input type="hidden" id="f-lng">
+        <button class="btn btn-orange" onclick="submitAd()">🚀 Publier</button>
+        <button class="btn btn-view" onclick="showHome()">Annuler</button>
+    </div>
+</div>
+
+<div id="view-inbox" class="view">
+    <h3 style="margin-bottom:20px;">📬 Messages Validés</h3>
+    <div id="inbox-container"></div>
+</div>
+
+<div id="view-support" class="view">
+    <div class="ad-card">
+        <h3>📞 Support</h3>
+        <textarea id="supportBody" placeholder="Votre message..." rows="6"></textarea>
+        <button class="btn btn-orange" onclick="sendSupport()">Envoyer</button>
+    </div>
+</div>
+
+<div id="main-nav" class="bottom-nav" style="display:none">
+    <div class="nav-item active" id="nav-home" onclick="showHome()"><i>🏠</i>Accueil</div>
+    <div class="nav-item" id="nav-inbox" onclick="showInbox(true)">
+        <div id="notif-badge" class="notification-dot"></div>
+        <i>💬</i>Messages
+    </div>
+    <div class="nav-item" id="nav-support" onclick="showSupport()"><i>🛠️</i>Support</div>
+    <div class="nav-item" onclick="logout()" style="color:var(--danger)"><i>🚪</i>Quitter</div>
+</div>
+
+<div id="msgModal" class="modal"><div class="modal-content">
+    <h4>✉️ Répondre</h4>
+    <textarea id="msgBody" placeholder="Votre message..." rows="5"></textarea>
+    <button class="btn btn-orange" onclick="sendMessage()">Envoyer</button>
+    <button class="btn btn-view" onclick="closeModal('msgModal')">Fermer</button>
+</div></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    const API_URL = "https://script.google.com/macros/s/AKfycbyQDS8rd37J4EmQKZnYfe0yqHsNexF4BVFJdt7XmbWRcLVY2PwFotLxCfZITJ9Q_Lrsfw/exec"; 
+    let currentUser = JSON.parse(localStorage.getItem('user')), allAds = [];
+    let map, marker, activeAdId, activeRecipient, activeRecipientName, activeCategory, refreshTimer, timeLeft = 20, currentFilter = null;
+    let lastMsgCount = parseInt(localStorage.getItem('msgCount')) || 0, base64Img = "";
+
+    function toggleLoader(s) { document.getElementById('loader').style.display = s ? 'flex' : 'none'; }
+    function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+    function toggleAuth(type) { 
+        document.getElementById('form-login').style.display = (type === 'login') ? 'block' : 'none';
+        document.getElementById('form-register').style.display = (type === 'register') ? 'block' : 'none';
+    }
+
+    function handleLogin() {
+        const e = document.getElementById('l-email').value, p = document.getElementById('l-pass').value;
+        if(!e || !p) return; toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:'login', email:e, password:p})}).then(r=>r.json()).then(res=>{
+            toggleLoader(false);
+            if(res.status==='success'){ currentUser=res.user; localStorage.setItem('user',JSON.stringify(res.user)); initApp(); }
+            else alert("Erreur");
+        }).catch(()=>toggleLoader(false));
+    }
+
+    function handleRegister() {
+        const n = document.getElementById('r-name').value, e = document.getElementById('r-email').value, g = document.getElementById('r-gsm').value, p1 = document.getElementById('r-pass').value, p2 = document.getElementById('r-pass2').value;
+        if(!n || !e || g.length!==10 || p1!==p2) return alert("Vérifiez vos données.");
+        toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:'register', name:n, email:e, gsm:g, password:p1})}).then(()=>{
+            toggleLoader(false); alert("Compte créé !"); toggleAuth('login');
+        }).catch(()=>toggleLoader(false));
+    }
+
+    function previewImage(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = e => { 
+                base64Img = e.target.result; 
+                document.getElementById('p-img').src = base64Img;
+                document.getElementById('p-img').style.display = 'block';
+            };
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function showHome() { 
+        updateNav('nav-home'); currentFilter = null;
+        document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-home').classList.add('active'); 
+        document.getElementById('main-nav').style.display='flex'; 
+        document.getElementById('top-nav').style.display='flex'; 
+        loadAds(); if(!refreshTimer) startRefreshCycle(); 
+    }
+
+    function loadAds() {
+        fetch(API_URL).then(r=>r.json()).then(data => {
+            allAds = data.reverse(); 
+            const container = document.getElementById('list-container'); 
+            if(!document.getElementById('view-home').classList.contains('active')) return;
+            container.innerHTML = ""; 
+            const filtered = currentFilter ? allAds.filter(a => a.Category === currentFilter) : allAds;
+            filtered.forEach(ad => {
+                const div = document.createElement('div'); div.className='ad-card';
+                div.innerHTML=`
+                    <div style="display:flex; justify-content:space-between;"><span style="font-size:0.7rem; color:#999">${ad.ID}</span><b>${ad.Category}</b></div>
+                    ${ad.Image ? `<img src="${ad.Image}" style="width:100%; border-radius:12px; margin:10px 0; max-height:150px; object-fit:cover;">` : ''}
+                    <div style="margin:10px 0;">Voisin: <b>${ad.Nom}</b></div>
+                    <div class="ad-details-box">${ad.Remarque.replace(/\n/g, "<br>")}</div>
+                    <div id="map-${ad.ID.replace(/\W/g,'')}" class="ad-mini-map"></div>
+                    ${ad.Email === currentUser.email ? `<button class="btn btn-view" style="color:var(--danger); border-color:var(--danger)" onclick="archiveAd('${ad.ID}')">🗑️ Supprimer</button>` : `<button class="btn btn-orange" onclick="openMsg('${ad.ID}','${ad.Email}','${ad.Nom}')">Contacter</button>`}
+                `;
+                container.appendChild(div);
+                setTimeout(() => {
+                    const mini = L.map(`map-${ad.ID.replace(/\W/g,'')}`, { zoomControl:false, attributionControl:false }).setView([ad.Lat, ad.Lng], 15);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mini); L.marker([ad.Lat, ad.Lng]).addTo(mini);
+                }, 300);
+            });
+        });
+    }
+
+    function archiveAd(id) {
+        if(!confirm("Supprimer ?")) return;
+        toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:'archiveAd', adId:id})}).then(()=> { toggleLoader(false); loadAds(); });
+    }
+
+    function showInbox(manual = false) {
+        updateNav('nav-inbox');
+        document.getElementById('notif-badge').style.display = 'none'; 
+        document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-inbox').classList.add('active');
+        if(manual) toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:"getMessages", email:currentUser.email})}).then(r=>r.json()).then(res=>{
+            toggleLoader(false);
+            const container = document.getElementById('inbox-container'); container.innerHTML = "";
+            if(!res.messages || res.messages.length === 0) { container.innerHTML = "Aucun message."; return; }
+            
+            const groups = {};
+            res.messages.forEach(m => {
+                if(!groups[m.adId]) groups[m.adId] = { msgs: [], last: new Date(0) };
+                groups[m.adId].msgs.push(m);
+                const d = new Date(m.date); if(d > groups[m.adId].last) groups[m.adId].last = d;
+            });
+
+            Object.keys(groups).sort((a,b) => groups[b].last - groups[a].last).forEach(adId => {
+                const ad = allAds.find(x => x.ID === adId) || { Remarque: "Annonce terminée", Category: "" };
+                const first = groups[adId].msgs[0];
+                const otherN = first.fromName === currentUser.name ? first.toName : first.fromName;
+                const otherE = first.senderEmail === currentUser.email ? first.receiverEmail : first.senderEmail;
+                
+                const div = document.createElement('div'); div.className='ad-card';
+                div.style.background = '#ece5dd'; // Couleur fond chat WhatsApp
+
+                // En-tête Discussion + Détails Annonce Intégrés
+                let adDetailsHtml = `
+                    <div class="inbox-ad-info">
+                        ${ad.Image ? `<img src="${ad.Image}" class="inbox-ad-img">` : ''}
+                        <div>
+                            <div style="font-weight:bold; color:var(--primary)">${ad.Category} (${adId})</div>
+                            <div style="color:#555; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">${ad.Remarque}</div>
+                        </div>
+                    </div>
+                `;
+
+                let msgsHtml = groups[adId].msgs.map(m => `
+                    <div class="msg-bubble ${m.type==='envoyé'?'msg-sent':'msg-received'}">
+                        ${m.text}
+                        <div style="font-size:0.6rem; text-align:right; opacity:0.5; margin-top:4px;">${new Date(m.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                    </div>
+                `).join('');
+
+                div.innerHTML = `
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:#fff; padding:10px; margin:-20px -20px 10px -20px; border-radius:20px 20px 0 0;">
+                        <b style="color:var(--primary)">👤 ${otherN}</b>
+                        <span style="font-size:0.7rem; opacity:0.6">${adId}</span>
+                    </div>
+                    ${adDetailsHtml}
+                    <div class="chat-container">${msgsHtml}</div>
+                    <button class="btn btn-orange" style="margin-top:15px; background:var(--primary)" onclick="openMsg('${adId}','${otherE}','${otherN}')">Répondre</button>
+                `;
+                container.appendChild(div);
+            });
+        });
+    }
+
+    function showForm(cat) { 
+        activeCategory = cat; base64Img = ""; document.getElementById('p-img').style.display = 'none';
+        document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); 
+        document.getElementById('view-form').classList.add('active'); 
+        document.getElementById('form-title').innerText = cat;
+        document.getElementById('opts-cuisine').style.display = (cat === 'CUISINE') ? 'block' : 'none';
+        document.getElementById('opts-laverie').style.display = (cat === 'LAVERIE') ? 'block' : 'none';
+        document.getElementById('opts-transport').style.display = (cat === 'TRANSPORT') ? 'block' : 'none';
+        setTimeout(initMap, 300); 
+    }
+
+    function submitAd() {
+        let options = [];
+        if(activeCategory === 'CUISINE') document.querySelectorAll('input[name="cuisine-opt"]:checked').forEach(c => options.push(c.value));
+        else if(activeCategory === 'LAVERIE') document.querySelectorAll('input[name="laverie-opt"]:checked').forEach(c => options.push(c.value));
+        else if(activeCategory === 'TRANSPORT') { const rb = document.querySelector('input[name="trans-type"]:checked'); if(rb) options.push(rb.value); }
+        if(options.length === 0) return alert("Sélectionnez une option.");
+        let note = options.join(" | ") + "\nLe " + document.getElementById('f-date').value + " à " + document.getElementById('f-time').value;
+        toggleLoader(true);
+        fetch(API_URL,{method:'POST',body:JSON.stringify({ 
+            action:'createAd', category:activeCategory, nom:currentUser.name, email:currentUser.email, gsm:currentUser.gsm, remarque: note, lat:document.getElementById('f-lat').value, lng:document.getElementById('f-lng').value, image: base64Img
+        })}).then(()=> { toggleLoader(false); showHome(); }); 
+    }
+
+    function sendSupport() {
+        const body = document.getElementById('supportBody').value; if(!body) return;
+        toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:'contactSupport', name:currentUser.name, email:currentUser.email, message:body})})
+        .then(() => { toggleLoader(false); alert("Envoyé !"); showHome(); });
+    }
+
+    function sendMessage() {
+        const b = document.getElementById('msgBody').value; if(!b) return;
+        toggleLoader(true);
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:'sendMessage', senderEmail:currentUser.email, senderName:currentUser.name, receiverEmail:activeRecipient, receiverName:activeRecipientName, refAnnonce:activeAdId, content:b})})
+        .then(()=> { toggleLoader(false); closeModal('msgModal'); alert("Message envoyé !"); });
+    }
+
+    function startRefreshCycle() {
+        if(refreshTimer) clearInterval(refreshTimer);
+        refreshTimer = setInterval(() => {
+            timeLeft--; 
+            if(timeLeft <= 0) { 
+                timeLeft = 20; loadAds(); 
+                if(document.getElementById('view-inbox').classList.contains('active')) showInbox(false);
+                else checkNewMessages(); 
+            }
+        }, 1000);
+    }
+
+    function checkNewMessages() {
+        if(!currentUser) return;
+        fetch(API_URL,{method:'POST', body:JSON.stringify({action:"getMessages", email:currentUser.email})}).then(r=>r.json()).then(res=>{
+            if(res.messages && res.messages.length > lastMsgCount) {
+                document.getElementById('notif-badge').style.display = 'block';
+                document.getElementById('notifSound').play();
+                lastMsgCount = res.messages.length;
+                localStorage.setItem('msgCount', lastMsgCount);
+            }
+        });
+    }
+
+    function initMap() { 
+        if(map) return; map = L.map('map').setView([50.85, 4.35], 13); 
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map); 
+        map.on('click', e => { if(marker) marker.setLatLng(e.latlng); else marker=L.marker(e.latlng).addTo(map); document.getElementById('f-lat').value=e.latlng.lat; document.getElementById('f-lng').value=e.latlng.lng; }); 
+    }
+
+    function updateNav(id) { document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+    function openMsg(id, email, name) { activeAdId=id; activeRecipient=email; activeRecipientName=name; document.getElementById('msgBody').value=""; document.getElementById('msgModal').style.display='flex'; }
+    function logout() { localStorage.clear(); location.reload(); }
+    function showSupport() { updateNav('nav-support'); document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById('view-support').classList.add('active'); }
+    function initApp() { if(currentUser) { document.getElementById('userLabel').innerText = currentUser.name; showHome(); } }
+    initApp();
+</script>
+</body>
+</html>
